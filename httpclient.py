@@ -138,10 +138,6 @@ class HTTPClient(object):
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
-            # args = {'a':'aaaaaaaaaaaaa',
-            #         'b':'bbbbbbbbbbbbbbbbbbbbbb',
-            #         'c':'c',
-            #         'd':'012345\r67890\n2321321\n\r'}
             return self.POST( url, args )
         else:
             return self.GET( url, args )
