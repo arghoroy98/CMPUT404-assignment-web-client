@@ -33,21 +33,29 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        hostname = urllib.parse.urlparse(url).hostname
+        port = urllib.parse.urlparse(url).port
+        if not port:
+            port = 80
+        return hostname,port
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
+        self.socket.settimeout(3)
         return None
 
     def get_code(self, data):
-        return None
+        return int(data.split(" ")[1])
 
     def get_headers(self,data):
-        return None
+        headers = data.split('\r\n\r\n')
+        return headers[0]
 
     def get_body(self, data):
-        return None
+        body = data.split('\r\n\r\n')[1]
+        return body
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -60,25 +68,80 @@ class HTTPClient(object):
         buffer = bytearray()
         done = False
         while not done:
-            part = sock.recv(1024)
-            if (part):
-                buffer.extend(part)
-            else:
-                done = not part
-        return buffer.decode('utf-8')
+            try:
+                part = sock.recv(1024)
+                if (part):
+                    buffer.extend(part)
+                else:
+                    done = not part
+            except:
+                break
+        return buffer.decode(encoding='utf-8', errors="backslashreplace") #https://stackoverflow.com/questions/71395155/unicodedecodeerror-when-try-to-read-data-from-google-com-in-python
+ 
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        (hostname, port) = self.get_host_port(url)
+        # Now we will get the path if it exists
+        target = urllib.parse.urlparse(url).path
+        if not target:
+            target = '/'    #If there is no path just use a /
+
+        #Now let's prepare the headers to send
+        headers = "GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n".format(target=target,host=hostname)
+        try:
+            self.connect(hostname,port)
+            self.sendall(headers)
+            data = self.recvall(self.socket)
+
+            #This gets the response body, response header and response status code
+            self.body = self.get_body(data)
+            self.headers = self.get_headers(data)
+            self.code = self.get_code(self.headers)
+            self.close()
+        except:
+            self.close()
+            self.code = 404
+            return HTTPResponse(self.code, "")
+        return HTTPResponse(self.code, self.body)
+
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        (hostname, port) = self.get_host_port(url)
+        # Now we will get the path if it exists
+        target = urllib.parse.urlparse(url).path
+        if not target:
+            target = '/'    #If there is no path just use a /
+
+        if args:
+            data_to_send = urllib.parse.urlencode(args)
+        else:
+            data_to_send = ""
+
+        data_length = len(data_to_send)
+
+        #Now let's prepare the headers to send
+        headers = "POST {target} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded  \r\nContent-length: {length} \r\n\r\n{data}".format(target=target,host=hostname, length=data_length, data=data_to_send)
+        try:
+            self.connect(hostname,port)
+            self.sendall(headers)
+            data = self.recvall(self.socket)
+            #This gets the response body, response header and response status code
+            self.body = self.get_body(data)
+            self.headers = self.get_headers(data)
+            self.code = self.get_code(self.headers)
+            self.close()
+        except:
+            self.close()
+            self.code = 404
+            return HTTPResponse(self.code, "")
+        return HTTPResponse(self.code, self.body)
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
+            # args = {'a':'aaaaaaaaaaaaa',
+            #         'b':'bbbbbbbbbbbbbbbbbbbbbb',
+            #         'c':'c',
+            #         'd':'012345\r67890\n2321321\n\r'}
             return self.POST( url, args )
         else:
             return self.GET( url, args )
